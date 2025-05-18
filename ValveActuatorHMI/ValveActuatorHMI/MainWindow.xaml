@@ -1,0 +1,453 @@
+﻿<Window x:Class="ValveActuatorHMI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ValveActuatorHMI"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:lvc="clr-namespace:LiveCharts.Wpf;assembly=LiveCharts.Wpf"
+        xmlns:converters="clr-namespace:ValveActuatorHMI.Converters"
+        mc:Ignorable="d"
+        Title="Управление приводом клапана" 
+        Height="800" 
+        Width="1200"
+        Style="{StaticResource MaterialDesignWindow}"
+        Closing="Window_Closing"
+        FontFamily="Segoe UI">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Убедитесь, что эти ресурсы существуют в вашем проекте -->
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Light.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Defaults.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Primary/MaterialDesignColor.Blue.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Accent/MaterialDesignColor.Lime.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+            <Style TargetType="TabItem">
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Padding" Value="15"/>
+            </Style>
+
+            <Style TargetType="TextBox" x:Key="NumericTextBox">
+                <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                <Setter Property="Margin" Value="5"/>
+                <Setter Property="Width" Value="120"/>
+                <Setter Property="materialDesign:HintAssist.Hint" Value="0,00000"/>
+            </Style>
+
+            <Style TargetType="GroupBox">
+                <Setter Property="Margin" Value="5"/>
+                <Setter Property="Padding" Value="10"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource MaterialDesignDivider}"/>
+                <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}"/>
+            </Style>
+
+            <converters:BooleanToBrushConverter x:Key="BooleanToBrush" TrueBrush="Green" FalseBrush="Red"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Connection and status panel -->
+        <Border Grid.Row="0" Background="{DynamicResource MaterialDesignToolBarBackground}" Padding="10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+
+                <!-- В верхней панели с другими кнопками управления -->
+                <Button Content="Загрузить Excel" 
+        Command="{Binding LoadExcelCommand}"
+        Style="{StaticResource MaterialDesignRaisedButton}"
+        Margin="5,0"
+        Width="150"/>
+
+                <ToggleButton Content="{materialDesign:PackIcon Kind=ThemeLightDark}" 
+              ToolTip="Переключить тему"
+              IsChecked="{Binding IsDarkTheme}"
+              Command="{Binding ToggleThemeCommand}"
+              Style="{StaticResource MaterialDesignIconButton}"
+              Margin="5,0"/>
+
+                <ComboBox x:Name="PortsComboBox" 
+                          Width="150" 
+                          Margin="5,0"
+                          ItemsSource="{Binding AvailablePorts}"
+                          SelectedItem="{Binding SelectedPort}"
+                          materialDesign:HintAssist.Hint="COM порт"
+                          Style="{StaticResource MaterialDesignFloatingHintComboBox}"/>
+
+                <Button Content="Подключить" 
+                        Command="{Binding ConnectCommand}" 
+                        Style="{StaticResource MaterialDesignRaisedButton}" 
+                        Margin="5,0"
+                        Width="120"/>
+
+                <Button Content="Отключить" 
+                        Command="{Binding DisconnectCommand}" 
+                        Style="{StaticResource MaterialDesignRaisedButton}" 
+                        Margin="5,0"
+                        Width="120"/>
+
+                <Button Content="Обновить порты" 
+                        Command="{Binding RefreshPortsCommand}" 
+                        Style="{StaticResource MaterialDesignRaisedButton}" 
+                        Margin="5,0"
+                        Width="120"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Main content -->
+        <TabControl Grid.Row="1" Margin="10,0">
+            <!-- Control tab -->
+            <TabItem Header="Управление">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Status panel -->
+                    <GroupBox Grid.Row="0" Header="Состояние привода">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Status parameters -->
+                            <StackPanel Grid.Column="0" Orientation="Vertical">
+                                <TextBlock Text="{Binding DeviceStatus.Position, StringFormat='Положение: {0:F2} %'}" 
+                                           FontWeight="Bold" Margin="0,2"/>
+                                <TextBlock Text="{Binding DeviceStatus.Speed, StringFormat='Скорость: {0:F2} об/мин'}" Margin="0,2"/>
+                                <TextBlock Text="{Binding DeviceStatus.Torque, StringFormat='Момент: {0:F2} Н*м'}" Margin="0,2"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Vertical">
+                                <TextBlock Text="{Binding DeviceStatus.RadiatorTemp, StringFormat='Температура радиатора: {0:F2} °C'}" Margin="0,2"/>
+                                <TextBlock Text="{Binding DeviceStatus.IndicatorTemp, StringFormat='Температура индикатора: {0:F2} °C'}" Margin="0,2"/>
+                                <TextBlock Text="{Binding DeviceStatus.SensorTemp, StringFormat='Температура датчика: {0:F2} °C'}" Margin="0,2"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Orientation="Vertical">
+                                <TextBlock Text="{Binding DeviceStatus.InputVoltage, StringFormat='Входное напряжение: {0:F2} В'}" Margin="0,2"/>
+                                <TextBlock Text="{Binding DeviceStatus.MotorCurrent, StringFormat='Ток двигателя: {0:F2} А'}" Margin="0,2"/>
+                                <TextBlock Text="{Binding DeviceStatus.Status, StringFormat='Статус: {0}'}" 
+                                           FontWeight="Bold" Margin="0,2"/>
+                            </StackPanel>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Charts and main commands -->
+                    <Grid Grid.Row="1" Margin="0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Charts -->
+                        <lvc:CartesianChart Grid.Column="0" Series="{Binding ChartSeries}" LegendLocation="Right" Hoverable="False">
+                            <lvc:CartesianChart.AxisX>
+                                <lvc:Axis Title="Время" Labels="{Binding TimeLabels}">
+                                    <lvc:Axis.Separator>
+                                        <lvc:Separator Step="1" StrokeThickness="0"/>
+                                    </lvc:Axis.Separator>
+                                </lvc:Axis>
+                            </lvc:CartesianChart.AxisX>
+                            <lvc:CartesianChart.AxisY>
+                                <lvc:Axis Title="Положение, %" MinValue="0" MaxValue="100">
+                                    <lvc:Axis.Separator>
+                                        <lvc:Separator Step="10"/>
+                                    </lvc:Axis.Separator>
+                                </lvc:Axis>
+                            </lvc:CartesianChart.AxisY>
+                        </lvc:CartesianChart>
+
+                        <!-- Main commands -->
+                        <StackPanel Grid.Column="1" Orientation="Vertical" Width="150" Margin="10,0,0,0">
+                            <Button Content="Открыть" 
+                                    Command="{Binding OpenCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Height="40" Margin="0,5"/>
+
+                            <Button Content="Закрыть" 
+                                    Command="{Binding CloseCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Height="40" Margin="0,5"/>
+
+                            <Button Content="Стоп" 
+                                    Command="{Binding StopCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Height="40" Margin="0,5"/>
+
+                            <Button Content="Переместить" 
+                                    Command="{Binding MoveCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Height="40" Margin="0,5"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Torque settings -->
+                    <GroupBox Grid.Row="2" Header="Настройка моментов" Margin="0,10,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Center">
+                                <TextBlock Text="ЗАКРЫТО" HorizontalAlignment="Center" FontWeight="Bold" Margin="0,5"/>
+                                <TextBox Text="{Binding TestSettings.ClosedTorque, StringFormat={}{0:F5}}" 
+                                         Style="{StaticResource NumericTextBox}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Center">
+                                <TextBlock Text="ДВИЖЕНИЕ" HorizontalAlignment="Center" FontWeight="Bold" Margin="0,5"/>
+                                <TextBox Text="{Binding TestSettings.MoveTorque, StringFormat={}{0:F5}}" 
+                                         Style="{StaticResource NumericTextBox}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Center">
+                                <TextBlock Text="ОТКРЫТО" HorizontalAlignment="Center" FontWeight="Bold" Margin="0,5"/>
+                                <TextBox Text="{Binding TestSettings.OpenTorque, StringFormat={}{0:F5}}" 
+                                         Style="{StaticResource NumericTextBox}"/>
+                            </StackPanel>
+                        </Grid>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
+
+            <!-- Alarm settings tab -->
+            <TabItem Header="Настройка аварий">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <!-- Voltage alarms -->
+                        <GroupBox Header="Аварии по входному напряжению" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Vertical">
+                                    <TextBlock Text="Верхний уровень, В:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.VoltageHighLevel, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical">
+                                    <TextBlock Text="Нижний уровень, В:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.VoltageLowLevel, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical">
+                                    <TextBlock Text="Задержка на высокое напряжение, с:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.VoltageHighDelay, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Vertical">
+                                    <TextBlock Text="Задержка на низкое напряжение, с:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.VoltageLowDelay, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+                            </Grid>
+                        </GroupBox>
+
+                        <!-- Temperature alarms -->
+                        <GroupBox Header="Аварии по температуре" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Vertical">
+                                    <TextBlock Text="Уровень перегрева, °C:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.OverheatLevel, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical">
+                                    <TextBlock Text="Уровень переохлаждения, °C:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.OvercoolLevel, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical">
+                                    <TextBlock Text="Задержка на перегрев, с:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.OverheatDelay, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Vertical">
+                                    <TextBlock Text="Задержка на переохлаждение, с:" Margin="0,5"/>
+                                    <TextBox Text="{Binding AlarmSettings.OvercoolDelay, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+                            </Grid>
+                        </GroupBox>
+
+                        <!-- Additional settings -->
+                        <GroupBox Header="Дополнительные настройки">
+                            <StackPanel Orientation="Vertical">
+                                <TextBlock Text="Задержка на 'НетДвижения', с:" Margin="0,5"/>
+                                <TextBox Text="{Binding AlarmSettings.NoMovementDelay, StringFormat={}{0:F5}}" 
+                                         Style="{StaticResource NumericTextBox}" HorizontalAlignment="Left"/>
+
+                                <CheckBox Content="Разрешение защит" 
+                                          IsChecked="{Binding AlarmSettings.ProtectionsEnabled}"
+                                          Margin="0,10,0,5"/>
+
+                                <Button Content="Сохранить настройки" 
+                                        Command="{Binding SaveSettingsCommand}"
+                                        Style="{StaticResource MaterialDesignRaisedButton}"
+                                        Width="200" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Test modes tab -->
+            <TabItem Header="Тестовые режимы">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="Тест частичным ходом" Margin="0,0,0,10">
+                            <StackPanel Orientation="Vertical">
+                                <TextBlock Text="Задание на перемещение, %" Margin="0,5"/>
+                                <TextBox Text="{Binding TestSettings.PartialMovePosition, StringFormat={}{0:F5}}" 
+                                         Style="{StaticResource NumericTextBox}" HorizontalAlignment="Left"/>
+
+                                <TextBlock Text="Задержка на «СТОП» в промежуточном положении, с" Margin="0,5"/>
+                                <TextBox Text="{Binding TestSettings.IntermediateStopDelay, StringFormat={}{0:F5}}" 
+                                         Style="{StaticResource NumericTextBox}" HorizontalAlignment="Left"/>
+
+                                <TextBlock Text="Задержка для аварии при неверном положении, с" Margin="0,5"/>
+                                <TextBox Text="{Binding TestSettings.WrongPositionAlarmDelay, StringFormat={}{0:F5}}" 
+                                         Style="{StaticResource NumericTextBox}" HorizontalAlignment="Left"/>
+
+                                <ComboBox SelectedIndex="{Binding TestSettings.TestMode}" Margin="0,5" Width="200" HorizontalAlignment="Left">
+                                    <ComboBoxItem>БЕЗ ОСТ</ComboBoxItem>
+                                    <ComboBoxItem>ЦИКЛ</ComboBoxItem>
+                                    <ComboBoxItem>ВРЕМЯ</ComboBoxItem>
+                                </ComboBox>
+
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10">
+                                    <Button Content="Начать тест" Width="120" Margin="5"
+                                            Command="{Binding StartTestCommand}"/>
+                                    <Button Content="Стоп" Width="120" Margin="5"
+                                            Command="{Binding StopTestCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="Количество пройденных циклов">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Vertical">
+                                    <TextBlock Text="Длительность для режима «TIMEMODE», мин" Margin="0,5"/>
+                                    <TextBox Text="{Binding TestSettings.TimeModeDuration, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical">
+                                    <TextBlock Text="Задание количества циклов для режима «CIRCLE»" Margin="0,5"/>
+                                    <TextBox Text="{Binding TestSettings.CircleModeCycles}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical">
+                                    <TextBlock Text="Задержка между командами, с" Margin="0,5"/>
+                                    <TextBox Text="{Binding TestSettings.CommandDelay, StringFormat={}{0:F5}}" 
+                                             Style="{StaticResource NumericTextBox}"/>
+                                </StackPanel>
+                            </Grid>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Calibration tab -->
+            <TabItem Header="Калибровка">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="Калибровка положений" Margin="0,0,0,10">
+                            <StackPanel Orientation="Vertical">
+                                <TextBlock Text="{Binding CalibrationStatus.OpenPositionText}" 
+                                           FontWeight="Bold" Margin="0,5"
+                                           Foreground="{Binding CalibrationStatus.IsOpenPositionCalibrated, 
+                                           Converter={StaticResource BooleanToBrush}}"/>
+
+                                <TextBlock Text="{Binding CalibrationStatus.ClosedPositionText}" 
+                                           FontWeight="Bold" Margin="0,5"
+                                           Foreground="{Binding CalibrationStatus.IsClosedPositionCalibrated, 
+                                           Converter={StaticResource BooleanToBrush}}"/>
+
+                                <TextBlock Text="{Binding CalibrationStatus.DeviceCalibrationText}" 
+                                           FontWeight="Bold" Margin="0,5"
+                                           Foreground="{Binding CalibrationStatus.IsDeviceCalibrated, 
+                                           Converter={StaticResource BooleanToBrush}}"/>
+
+                                <TextBlock Text="Авария датчика положения" 
+                                           Foreground="Red" Margin="0,5"
+                                           Visibility="{Binding CalibrationStatus.PositionSensorError, 
+                                           Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="Команды на калибровку" Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="Выставить 'ЗАКРЫТО'" Width="180" Margin="5"
+                                        Command="{Binding CalibrateCloseCommand}"/>
+                                <Button Content="Выставить 'ОТКРЫТО'" Width="180" Margin="5"
+                                        Command="{Binding CalibrateOpenCommand}"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- Status bar -->
+        <StatusBar Grid.Row="2">
+            <StatusBarItem>
+                <TextBlock Text="{Binding ConnectionStatus}"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock Text="{Binding LastUpdateTime}"/>
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- Notifications -->
+        <materialDesign:Snackbar Grid.Row="0" Grid.RowSpan="3"
+                                MessageQueue="{Binding NotificationQueue}"/>
+    </Grid>
+</Window>
